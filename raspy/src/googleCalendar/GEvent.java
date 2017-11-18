@@ -47,13 +47,12 @@ class GEvent {
     @Override
     public String toString() {
         String string = "";
-        if (isAllDay()) string += "終日、";
-        else {
+        if (!isAllDay()) {
             string += GCalendar.formatTime(startTime) + "から";
             string += GCalendar.formatTime(endTime) + "まで、";
         }
         string += "「" + title + "」";
-        string += description+"。。";
+        string += description + "。";
         return string;
     }
 }

@@ -1,22 +1,19 @@
+package openJTalk;
+
 import javax.sound.sampled.*;
 import java.io.*;
-import java.security.InvalidParameterException;
 import java.util.*;
 
 /**
  * Created by ta on 2017/10/31.
  */
 public class OpenJTalk {
-    private String tmpDir;
     private Properties properties;
+    private String voicePath;
     private ArrayList<File> playList;
 
     public OpenJTalk() {
-        tmpDir = "temp";
-        Properties param = new Properties();
-        param.put("x", "default");
-        param.put("m", "default");
-        setProperties(param);
+        properties = new Properties();
         playList = new ArrayList<>();
     }
 
@@ -25,16 +22,15 @@ public class OpenJTalk {
         String audioPath = generateVoice(text);
 
         playList.add(new File(audioPath));
-        if(playList.size() == 1) play();
+        if (playList.size() == 1) play();
     }
 
     private void play() {
         Thread thread = new Thread(() -> {
             while (playList.size() != 0) {
+                File audioFile = playList.get(0);
+                if (!audioFile.exists()) continue;
                 try {
-
-                    File audioFile = playList.get(0);
-                    if (!audioFile.exists()) continue;
                     // Read the sound file using AudioInputStream.
                     AudioInputStream stream = AudioSystem.getAudioInputStream(audioFile);
 
@@ -70,7 +66,7 @@ public class OpenJTalk {
     }
 
     private String generateVoice(File scriptFile, UUID uid) {
-        String voiceFilePath = tmpDir + "/" + uid + ".wav";
+        String voiceFilePath = getTmpDir() + "/" + uid + ".wav";
         String[] command = generateCommand(voiceFilePath, scriptFile.getAbsolutePath());
         execute(command);
         return voiceFilePath;
@@ -85,32 +81,23 @@ public class OpenJTalk {
     }
 
     private String[] generateCommand(String voiceFilePath, String textFilePath) {
-        if (properties.size() == 0 || (properties.get("x") == null || properties.get("m") == null))
-            throw new InvalidParameterException();
-        Map<String, String> dictionary = loadDictionaries();
-        Map<String, String> voices = loadVoices();
-
-        String[] command = {"open_jtalk"};
-        String[] option;
-        option = new String[]{"-x", dictionary.get(properties.get("x"))};
-        command = mergeArray(command, option);
-        option = new String[]{"-m", voices.get(properties.get("m"))};
-        command = mergeArray(command, option);
+        Helper helper = Helper.getHelper();
+        ArrayList<String> command = new ArrayList<>();
+        command.add("open_jtalk");
+        command.addAll(Arrays.asList("-x", helper.getDicDir()));
+        command.addAll(Arrays.asList("-m", voicePath));
         String[] keys = {"s", "p", "a", "b", "r", "fm", "u", "jm", "jf", "g"};
-        for (String key : keys) {
-            if (properties.get(key) != null) {
-                option = new String[]{"-" + key, String.valueOf(properties.get(key))};
-                command = mergeArray(command, option);
-            }
-        }
-        option = new String[]{"-ow", voiceFilePath};
-        command = mergeArray(command, option);
-        command = mergeArray(command, new String[]{textFilePath});
-        return command;
+        for (String key : keys)
+            if (properties.get(key) != null)
+                command.addAll(Arrays.asList("-" + key, properties.getProperty(key)));
+
+        command.addAll(Arrays.asList("-ow", voiceFilePath));
+        command.add(textFilePath);
+        return command.toArray(new String[command.size()]);
     }
 
     public String generateScript(String text, UUID uuid) {
-        String path = tmpDir + "/" + uuid + ".txt";
+        String path = getTmpDir() + "/" + uuid + ".txt";
         PrintWriter writer = null;
         try {
             writer = new PrintWriter(path, "UTF-8");
@@ -128,48 +115,19 @@ public class OpenJTalk {
     }
 
     public String getTmpDir() {
-        return tmpDir;
+        return Helper.getHelper().getTmpDir();
     }
 
-    private static Map<String, String> loadDictionaries() {
-        Map<String, String> dic = new HashMap<>();
-//        File f = new File("dictionary");
-//        for (File file : f.listFiles()) {
-//            if (file.isDirectory())
-//                dic.put(file.getName(), file.toString());
-//        }
-        dic.put("default", "/usr/local/Cellar/open-jtalk/1.10_1/dic");
-        return dic;
-    }
-
-    private static Map<String, String> loadVoices() {
-        Map<String, String> voice = new HashMap<>();
-//        File f = new File("voices");
-//        for (File files : f.listFiles())
-//            if (files.isDirectory())
-//                for (File subfile : files.listFiles())
-//                    if (subfile.isFile()
-//                            && subfile.toString()
-//                            .replaceAll("^.*\\.([^.]+)$", "$1")
-//                            .equals("htsvoice"))
-//                        voice.put(
-//                                subfile.getName().substring(0,
-//                                        subfile.getName().lastIndexOf('.')),
-//                                subfile.getPath());
-
-        voice.put("default", "/usr/local/Cellar/open-jtalk/1.10_1/voice/m100/nitech_jp_atr503_m001.htsvoice");
-        return voice;
-    }
-
-    public void setTmpDir(String tmpDir) {
-        this.tmpDir = tmpDir;
+    public void setVoice(String voice) {
+        Map<String, String> voices = Helper.getHelper().loadVoices();
+        this.voicePath = voices.get(voice);
     }
 
     private String execute(String[] command) {
         StringBuilder output = new StringBuilder();
         Process p;
         try {
-            p = Runtime.getRuntime().exec(command, null, new File(tmpDir));
+            p = Runtime.getRuntime().exec(command, null, new File(getTmpDir()));
             p.waitFor();
             BufferedReader reader = new BufferedReader(
                     new InputStreamReader(p.getInputStream())
@@ -181,21 +139,6 @@ public class OpenJTalk {
             e.printStackTrace();
         }
         return output.toString();
-    }
-
-    private String[] mergeArray(String[] array1, String[] array2) {
-        String[][] arrays = {array1, array2};
-        int length = 0;
-        for (String[] array : arrays) {
-            length += array.length;
-        }
-        String[] mergedArray = new String[length];
-        int lastIndex = 0;
-        for (String[] array : arrays) {
-            System.arraycopy(array, 0, mergedArray, lastIndex, array.length);
-            lastIndex += array.length;
-        }
-        return mergedArray;
     }
 
     public void setProperties(Properties properties) {
